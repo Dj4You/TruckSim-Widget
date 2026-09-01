@@ -326,6 +326,12 @@ namespace ETSOverlay
             public int SpeedWarning { get; set; }
         }
 
+        private static readonly JsonSerializerOptions StateJsonOptions = new()
+        {
+            NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
+            WriteIndented = true
+        };
+
         private string _currentRouteText = "NOT DEFINED";
         private string RouteText
         {
@@ -2224,13 +2230,16 @@ namespace ETSOverlay
                     SpeedLimiterBrakeKey = SpeedLimiterService.Instance.BrakeKey.ToString()
                 };
 
-                var json = JsonSerializer.Serialize(state);
+                var json = JsonSerializer.Serialize(state, StateJsonOptions);
                 File.WriteAllText(stateFilePath, json);
 
                 SaveGameState(GameType.Ets);
                 SaveGameState(GameType.Ats);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                WriteLog($"[ERROR] Failed to save state: {ex.Message}");
+            }
         }
 
         private void LoadState()
@@ -2242,7 +2251,7 @@ namespace ETSOverlay
                     string content = File.ReadAllText(stateFilePath);
                     if (content.TrimStart().StartsWith("{", StringComparison.Ordinal))
                     {
-                        var state = JsonSerializer.Deserialize<AppState>(content);
+                        var state = JsonSerializer.Deserialize<AppState>(content, StateJsonOptions);
                         if (state != null)
                         {
                             Left = state.Left;
@@ -2352,7 +2361,10 @@ namespace ETSOverlay
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                WriteLog($"[ERROR] Failed to load state: {ex.Message}");
+            }
 
             if (string.IsNullOrEmpty(LicenseManager.Instance.HardwareHash))
                 LicenseManager.Instance.Initialize("", null, DateTime.MinValue, "", "", "");
@@ -3663,10 +3675,13 @@ namespace ETSOverlay
                         .ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
                 };
 
-                var json = JsonSerializer.Serialize(state);
+                var json = JsonSerializer.Serialize(state, StateJsonOptions);
                 File.WriteAllText(GetGameStatePath(game), json);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                WriteLog($"[ERROR] Failed to save game state ({game}): {ex.Message}");
+            }
         }
 
         private void LoadGameState(GameType game)
@@ -3679,7 +3694,7 @@ namespace ETSOverlay
                 string content = File.ReadAllText(path);
                 if (!content.TrimStart().StartsWith("{", StringComparison.Ordinal)) return;
 
-                var state = JsonSerializer.Deserialize<GameState>(content);
+                var state = JsonSerializer.Deserialize<GameState>(content, StateJsonOptions);
                 if (state == null) return;
 
                 if (game == GameType.Ats)
@@ -3712,7 +3727,10 @@ namespace ETSOverlay
                 // Дополнительно загружаем отдельные файлы заказов из папки игры
                 LoadIndividualJobFiles(game);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                WriteLog($"[ERROR] Failed to load game state ({game}): {ex.Message}");
+            }
         }
 
         // Загружает все отдельные файлы заказов из папки игры
@@ -3729,7 +3747,7 @@ namespace ETSOverlay
                     try
                     {
                         string content = File.ReadAllText(jobFile);
-                        var jobState = JsonSerializer.Deserialize<JobState>(content);
+                        var jobState = JsonSerializer.Deserialize<JobState>(content, StateJsonOptions);
                         if (jobState != null && jobState.CargoWasLoaded)
                         {
                             string stateKey = GetJobStateKey(jobState.TelemetryId);
@@ -3740,10 +3758,16 @@ namespace ETSOverlay
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        WriteLog($"[ERROR] Failed to load job file '{jobFile}': {ex.Message}");
+                    }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                WriteLog($"[ERROR] Failed to read job files directory: {ex.Message}");
+            }
         }
 
         // Сохраняет отдельный заказ в файл JSON в папке игры
@@ -3758,7 +3782,7 @@ namespace ETSOverlay
                 string safeJobId = Regex.Replace(jobId, "[^a-zA-Z0-9_-]", "_");
                 string filePath = Path.Combine(folder, $"job_{safeJobId}.json");
 
-                var json = JsonSerializer.Serialize(jobState, new JsonSerializerOptions { WriteIndented = true });
+                var json = JsonSerializer.Serialize(jobState, StateJsonOptions);
                 File.WriteAllText(filePath, json);
             }
             catch (Exception ex)
@@ -3781,7 +3805,7 @@ namespace ETSOverlay
                 if (!File.Exists(filePath)) return null;
 
                 string content = File.ReadAllText(filePath);
-                var jobState = JsonSerializer.Deserialize<JobState>(content);
+                var jobState = JsonSerializer.Deserialize<JobState>(content, StateJsonOptions);
                 if (jobState != null)
                 {
                     WriteLog($"Job state loaded from file: {safeJobId}");
